@@ -18,6 +18,7 @@ class Pattern:
         self.mean = 0
         self.mean_p = 0
         self.sigma = 0
+        self.signature = 0
 
     def add_fit_element(self, element):
         self.fit_elements.append(element)
@@ -36,6 +37,8 @@ class PatternDb:
         self.candle_expression = r"C\d+: OHLCV:([.0-9]+):([.0-9]+):([.0-9]+):([.0-9]+):([.0-9]+)"
         self.mean_expression = r"mean = ([-.0-9]+); rejecting H0 at p-value: ([-.0-9]+); sigma = ([-.0-9]+)"
         self.binomial_expression = r"\+ returns: ([-.0-9]+); p-value: ([-.0-9]+)"
+        self.momentum_expression = r"Momentum sign: ([-0-9]+)"
+        self.signature_expression = r"Signature: (\w+)"
         self.price_tolerance = 0.1
         self.volume_tolerance = 0.1
         self.exit_after = 1
@@ -51,11 +54,16 @@ class PatternDb:
 
         m = re.search("Exit after: ([0-9]+)", text)
         self.exit_after = int(m.group(1))
+        
+        m = re.search("Momentum order: ([0-9]+)", text)
+        self.momentum = int(m.group(1))
  
         p = re.compile(self.pattern_expression, re.MULTILINE | re.DOTALL)
         rx_candle = re.compile(self.candle_expression)
         rx_mean = re.compile(self.mean_expression)
         rx_bin = re.compile(self.binomial_expression)
+        rx_momentum = re.compile(self.momentum_expression)
+        rx_signature = re.compile(self.signature_expression)
         matches = p.findall(text)
         for match in matches:
             pattern = Pattern()
@@ -80,13 +88,21 @@ class PatternDb:
             m = rx_bin.search(match)
             pattern.p_positive = float(m.group(1))
             pattern.binomial_p = float(m.group(2))
+            
+            m = rx_signature.search(match)
+            pattern.signature = m.group(1)
+            
+            m = rx_momentum.search(match)
+            pattern.momentum = m.group(1)
 
             pattern.exit_after = self.exit_after
 
             self.patterns.append(pattern)
     
-    def find_match(self, fit_elements):
+    def find_match(self, fit_elements, momentum=None):
         normalized = self.normalize(fit_elements)
+        
+        signature = self.make_signature(normalized)
 
         abs_min = normalized[0].low
         abs_max = normalized[0].high
@@ -100,6 +116,13 @@ class PatternDb:
         for pattern in self.patterns:
             if pattern.length() != len(fit_elements):
                 continue
+            
+            if pattern.signature != signature:
+                continue
+            
+            if momentum:
+                if pattern.momentum != momentum:
+                    continue
 
             found_pattern = pattern
             for i in range(0, pattern.length()):
@@ -111,8 +134,26 @@ class PatternDb:
                 found.append(pattern)
 
         return found
+    
+    def make_signature(self, fit_elements):
+        signature_elements = []
+        index = 0
+        for el in fit_elements:
+            signature_elements.append((el.open, 'O' + str(index)))
+            signature_elements.append((el.high, 'H' + str(index)))
+            signature_elements.append((el.low, 'L' + str(index)))
+            signature_elements.append((el.close, 'C' + str(index)))
+            index += 1
+            
+        signature_elements = sorted(signature_elements, key=lambda el: el[0])
+        signature = ''
+        for el in signature_elements:
+            signature += el[1]
+            
+        return signature
                 
     def fit(self, el1, el2, candle_tolerance):
+        return True
         if abs(el1.open - el2.open) > candle_tolerance:
             return False
         if abs(el1.close - el2.close) > candle_tolerance:

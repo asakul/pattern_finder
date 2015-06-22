@@ -57,12 +57,21 @@ def main():
         for i in range(0, q.total_candles() - 1):
             c0 = q.get_candle(i)
             c1 = q.get_candle(i + 1)
+            
+            momentum = 0
+            if i - db.momentum >= 0:
+                momentum = q.get_candle(i - db.momentum).close_price - c0.open_price
+                if momentum > 0:
+                    momentum = 1
+                else:
+                    momentum = -1
+                    
             t = q.get_time(i + 1)
             elements = []
             for c in [c0, c1]:
                 elements.append(FitElement(c.open_price, c.max_price, c.min_price, c.close_price, c.volume))
 
-            patterns = db.find_match(elements)
+            patterns = db.find_match(elements, momentum)
             if len(patterns) > 0:
                 print("At ", t)
                 this_pattern = patterns[0]
@@ -87,22 +96,25 @@ def main():
                 true_ret = ret
                 high_ret = -10000
                 low_ret = 10000
-                #stop = False
-                #for offset in range(0, this_pattern.exit_after):
-                    #c = q.get_candle(i + 2)
-                    #high_ret = max(high_ret, (c.max_price - c2.open_price) / c2.open_price)
-                    #low_ret = min(low_ret, (c.min_price - c2.open_price) / c2.open_price)
-                    #if this_pattern.p_positive > 0.5:
-                        #if -0.001 > low_ret:
-                            #stop = True
-                            #ret = -0.001
-                    #else:
-                        #if 0.001 < high_ret:
-                            #stop = True
-                            #ret = 0.001
+#                 stop = False
+#                 for offset in range(0, this_pattern.exit_after):
+#                     c = q.get_candle(i + 2)
+#                     high_ret = max(high_ret, (c.max_price - c2.open_price) / c2.open_price)
+#                     low_ret = min(low_ret, (c.min_price - c2.open_price) / c2.open_price)
+#                     if this_pattern.p_positive < 0.5:
+#                         if -0.001 > low_ret:
+#                             stop = True
+#                             ret = -0.001
+#                     else:
+#                         if 0.001 < high_ret:
+#                             stop = True
+#                             ret = 0.001
 
                 if this_pattern.p_positive < 0.5:
                     ret = -ret
+                    
+                #if ret < -0.001:
+                #    ret = -0.001
 
                 if ret > 0:
                     correct += 1
@@ -110,7 +122,7 @@ def main():
 
                 total_return += ret
                 total += 1
-                print("===== Return:", ret)
+                print("===== Return:", ret, " (", true_ret, ")")
 
                 print("===")
 
